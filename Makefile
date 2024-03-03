@@ -4,11 +4,14 @@
 # If your platform has the OpenBSD reallocarray(3) call, you may
 # add -DHAVE_REALLOCARRAY to CFLAGS to use that, saving a bit
 # of code space in the shared library.
+#
+# SPDX-FileCopyrightText: Copyright (C) Eric S. Raymond <esr@thyrsus.com>
+# SPDX-License-Identifier: MIT
 
 CC ?= gcc
 OFLAGS = -O0 -g
 OFLAGS  = -O2
-CFLAGS  = -std=gnu99 -fPIC -Wall -Wno-format-truncation $(OFLAGS)
+CFLAGS  += -std=gnu99 -fPIC -Wall -Wno-format-truncation $(OFLAGS)
 
 SHELL = /bin/sh
 TAR = tar
@@ -103,7 +106,7 @@ $(LIBGIFSO): $(OBJECTS) $(HEADERS)
 ifeq ($(UNAME), Darwin)
 	$(CC) $(CFLAGS) -dynamiclib -current_version $(LIBVER) $(OBJECTS) -o $(LIBGIFSO)
 else
-	$(CC) $(CFLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBGIFSOMAJOR) -o $(LIBGIFSO) $(OBJECTS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBGIFSOMAJOR) -o $(LIBGIFSO) $(OBJECTS)
 endif
 
 libgif.a: $(OBJECTS) $(HEADERS)
@@ -113,7 +116,7 @@ $(LIBUTILSO): $(UOBJECTS) $(UHEADERS)
 ifeq ($(UNAME), Darwin)
 	$(CC) $(CFLAGS) -dynamiclib -current_version $(LIBVER) $(OBJECTS) -o $(LIBUTILSO)
 else
-	$(CC) $(CFLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBUTILMAJOR) -o $(LIBUTILSO) $(UOBJECTS)
+	$(CC) $(CFLAGS) $(CPPLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBUTILMAJOR) -o $(LIBUTILSO) $(UOBJECTS)
 endif
 
 libutil.a: $(UOBJECTS) $(UHEADERS)
@@ -123,7 +126,7 @@ clean:
 	rm -f $(UTILS) $(TARGET) libgetarg.a libgif.a $(LIBGIFSO) libutil.a $(LIBUTILSO) *.o
 	rm -f $(LIBGIFSOVER)
 	rm -f $(LIBGIFSOMAJOR)
-	rm -fr doc/*.[17] *.html doc/staging
+	$(MAKE) --quiet -C doc clean
 
 check: all
 	$(MAKE) -C tests
