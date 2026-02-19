@@ -11,6 +11,8 @@ gifbuild - dump GIF data in a textual format, or undump it to a GIF
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <limits.h>
 
 #include "getarg.h"
 #include "gif_lib.h"
@@ -164,11 +166,19 @@ static void Icon2Gif(char *FileName, FILE *txtin, bool GifNoisyPrint,
 
 		if (sscanf(buf, "screen width %d\n", &GifFileOut->SWidth) ==
 		    1) {
+			if (GifFileOut->SWidth <= 0) {
+				PARSE_ERROR("Invalid screen width.");
+				exit(EXIT_FAILURE);
+			}
 			continue;
 		}
 
 		else if (sscanf(buf, "screen height %d\n",
 		                &GifFileOut->SHeight) == 1) {
+			if (GifFileOut->SHeight <= 0) {
+				PARSE_ERROR("Invalid screen height.");
+				exit(EXIT_FAILURE);
+			}
 			continue;
 		}
 
@@ -228,6 +238,11 @@ static void Icon2Gif(char *FileName, FILE *txtin, bool GifNoisyPrint,
 		                &blue, &KeyTable[ColorMapSize]) == 4) {
 			if (ColorMapSize >= 256) {
 				PARSE_ERROR("Too many color entries.");
+				exit(EXIT_FAILURE);
+			}
+			if (ColorMapSize >= PRINTABLES) {
+				PARSE_ERROR("Too many color entries for keyed "
+				            "color map.");
 				exit(EXIT_FAILURE);
 			}
 			ColorMap[ColorMapSize].Red = red;
@@ -585,12 +600,26 @@ static void Icon2Gif(char *FileName, FILE *txtin, bool GifNoisyPrint,
 			static GifPixelType *Raster;
 			int c;
 			bool hex = (strstr(buf, "hex") != NULL);
+			size_t pixel_count;
+
+			if (NewImage->ImageDesc.Width <= 0 ||
+			    NewImage->ImageDesc.Height <= 0 ||
+			    NewImage->ImageDesc.Width >
+			        INT_MAX / NewImage->ImageDesc.Height) {
+				PARSE_ERROR("Invalid image dimensions.");
+				exit(EXIT_FAILURE);
+			}
+
+			pixel_count = (size_t)NewImage->ImageDesc.Width *
+			              (size_t)NewImage->ImageDesc.Height;
+			if (pixel_count > SIZE_MAX / sizeof(GifPixelType)) {
+				PARSE_ERROR("Image dimensions overflow.");
+				exit(EXIT_FAILURE);
+			}
 
 			/* coverity[overflow_sink] */
 			if ((Raster = (GifPixelType *)malloc(
-			         sizeof(GifPixelType) *
-			         NewImage->ImageDesc.Width *
-			         NewImage->ImageDesc.Height)) == NULL) {
+			         sizeof(GifPixelType) * pixel_count)) == NULL) {
 				PARSE_ERROR("Failed to allocate raster block, "
 				            "aborted.");
 				exit(EXIT_FAILURE);
@@ -783,6 +812,7 @@ static void DumpExtensions(GifFileType *GifFileOut, int ExtensionBlockCount,
 static void Gif2Icon(char *FileName, int fdin, int fdout, char NameTable[]) {
 	int ErrorCode, im, i, j, ColorCount = 0;
 	GifFileType *GifFile;
+	size_t name_len = strlen(NameTable);
 
 	if (fdin == -1) {
 		if ((GifFile = DGifOpenFileName(FileName, &ErrorCode)) ==
@@ -819,6 +849,9 @@ static void Gif2Icon(char *FileName, int fdin, int fdout, char NameTable[]) {
 
 		for (i = 0; i < GifFile->SColorMap->ColorCount; i++) {
 			if (GifFile->SColorMap->ColorCount < PRINTABLES) {
+				if ((size_t)i >= name_len) {
+					GIF_EXIT("Name table too short.");
+				}
 				printf("\trgb %03d %03d %03d is %c\n",
 				       GifFile->SColorMap->Colors[i].Red,
 				       GifFile->SColorMap->Colors[i].Green,
@@ -858,6 +891,10 @@ static void Gif2Icon(char *FileName, int fdin, int fdout, char NameTable[]) {
 				for (i = 0;
 				     i < image->ImageDesc.ColorMap->ColorCount;
 				     i++) {
+					if ((size_t)i >= name_len) {
+						GIF_EXIT(
+						    "Name table too short.");
+					}
 					printf(
 					    "\trgb %03d %03d %03d is %c\n",
 					    image->ImageDesc.ColorMap->Colors[i]

@@ -254,11 +254,8 @@ static void DumpScreen2RGB(char *FileName, int OneFileFlag,
 			char OneFileName[80];
 
 			for (i = 0; i < 3; i++) {
-				strncpy(OneFileName, FileName,
-				        sizeof(OneFileName) - 1);
-				strncat(OneFileName, Postfixes[i],
-				        sizeof(OneFileName) - 1 -
-				            strlen(OneFileName));
+				snprintf(OneFileName, sizeof(OneFileName),
+				         "%s%s", FileName, Postfixes[i]);
 
 				if ((rgbfp[i] = fopen(OneFileName, "wb")) ==
 				    NULL) {
@@ -327,6 +324,11 @@ static void DumpScreen2RGB(char *FileName, int OneFileFlag,
 			GifRow = ScreenBuffer[i];
 			GifQprintf("\b\b\b\b%-4d", ScreenHeight - i);
 			for (j = 0; j < ScreenWidth; j++) {
+				/* Check if color is within color palete */
+				if (GifRow[j] >= ColorMap->ColorCount) {
+					GIF_EXIT(GifErrorString(
+					    D_GIF_ERR_IMAGE_DEFECT));
+				}
 				ColorMapEntry = &ColorMap->Colors[GifRow[j]];
 				Buffers[0][j] = ColorMapEntry->Red;
 				Buffers[1][j] = ColorMapEntry->Green;

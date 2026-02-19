@@ -8,20 +8,20 @@
 # SPDX-FileCopyrightText: Copyright (C) Eric S. Raymond <esr@thyrsus.com>
 # SPDX-License-Identifier: MIT
 
-CC ?= gcc
-OFLAGS = -O0 -g
-OFLAGS  = -O2
-CFLAGS  += -std=gnu99 -fPIC -Wall -Wno-format-truncation $(OFLAGS)
-
-SHELL = /bin/sh
-TAR = tar
-INSTALL = install
-
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
 INCDIR = $(PREFIX)/include
 LIBDIR = $(PREFIX)/lib
 MANDIR = $(PREFIX)/share/man
+
+CC ?= gcc
+OFLAGS = -O0 -g
+OFLAGS  = -O2
+CFLAGS  += -std=gnu99 -fPIC -Wall $(OFLAGS)
+
+SHELL = /bin/sh
+TAR = tar
+INSTALL = install
 
 # No user-serviceable parts below this line
 
@@ -32,15 +32,24 @@ LIBPOINT=0
 LIBVER=$(LIBMAJOR).$(LIBMINOR).$(LIBPOINT)
 
 SOURCES = dgif_lib.c egif_lib.c gifalloc.c gif_err.c gif_font.c \
-	gif_hash.c openbsd-reallocarray.c
+	gif_hash.c openbsd-reallocarray.c quantize.c
 HEADERS = gif_hash.h  gif_lib.h  gif_lib_private.h
 OBJECTS = $(SOURCES:.c=.o)
 
-USOURCES = qprintf.c quantize.c getarg.c 
+USOURCES = qprintf.c getarg.c
 UHEADERS = getarg.h
 UOBJECTS = $(USOURCES:.c=.o)
 
 UNAME:=$(shell uname)
+
+# Rules
+
+.PHONY: all distcheck check reflow cppcheck spellcheck
+.PHONY: install install-bin install-include ibnstall-lib install-man
+.PHONY: uninstall uninstall-bin uninstall-include uninstall-lib uninstall-man
+.PHONY: version dist release refresh
+
+# Build
 
 # Some utilities are installed
 INSTALLABLE = \
@@ -94,13 +103,20 @@ LIBUTILSO	= libutil.$(SOEXTENSION)
 LIBUTILSOMAJOR	= libutil.$(LIBMAJOR).$(SOEXTENSION)
 endif
 
-all: $(LIBGIFSO) libgif.a $(LIBUTILSO) libutil.a $(UTILS)
+SHARED_LIBS = $(LIBGIFSO) $(LIBUTILSO)
+STATIC_LIBS = libgif.a libutil.a
+
+all: shared-lib static-lib $(UTILS)
 ifeq ($(UNAME), Darwin)
 else
 	$(MAKE) -C doc
 endif
 
-$(UTILS):: libgif.a libutil.a
+$(UTILS):: $(STATIC_LIBS)
+
+shared-lib: $(SHARED_LIBS)
+
+static-lib: $(STATIC_LIBS)
 
 $(LIBGIFSO): $(OBJECTS) $(HEADERS)
 ifeq ($(UNAME), Darwin)
@@ -116,17 +132,19 @@ $(LIBUTILSO): $(UOBJECTS) $(UHEADERS)
 ifeq ($(UNAME), Darwin)
 	$(CC) $(CFLAGS) -dynamiclib -current_version $(LIBVER) $(OBJECTS) -o $(LIBUTILSO)
 else
-	$(CC) $(CFLAGS) $(CPPLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBUTILMAJOR) -o $(LIBUTILSO) $(UOBJECTS)
+	$(CC) $(CFLAGS) $(CPPLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBUTILSOMAJOR) -o $(LIBUTILSO) $(UOBJECTS)
 endif
 
 libutil.a: $(UOBJECTS) $(UHEADERS)
 	$(AR) rcs libutil.a $(UOBJECTS)
 
 clean:
-	rm -f $(UTILS) $(TARGET) libgetarg.a libgif.a $(LIBGIFSO) libutil.a $(LIBUTILSO) *.o
+	rm -f $(UTILS) $(TARGET) libgetarg.a $(SHARED_LIBS) $(STATIC_LIBS) *.o
 	rm -f $(LIBGIFSOVER)
 	rm -f $(LIBGIFSOMAJOR)
 	$(MAKE) --quiet -C doc clean
+
+# Validate
 
 check: all
 	$(MAKE) -C tests
@@ -134,7 +152,14 @@ check: all
 reflow:
 	@clang-format --style="{IndentWidth: 8, UseTab: ForIndentation}" -i $$(find . -name "*.[ch]")
 
-# Installation/uninstallation
+# cppcheck should run clean
+cppcheck:
+	@cppcheck --quiet --inline-suppr --template gcc --enable=all --suppress=unusedFunction --suppress=missingInclude --force *.[ch]
+
+spellcheck:
+	@spellcheck local.dic doc/*.xml
+
+# Install/uninstall
 
 ifeq ($(UNAME), Darwin)
 install: all install-bin install-include install-lib
@@ -148,12 +173,15 @@ install-bin: $(INSTALLABLE)
 install-include:
 	$(INSTALL) -d "$(DESTDIR)$(INCDIR)"
 	$(INSTALL) -m 644 gif_lib.h "$(DESTDIR)$(INCDIR)"
-install-lib:
+install-static-lib:
 	$(INSTALL) -d "$(DESTDIR)$(LIBDIR)"
 	$(INSTALL) -m 644 libgif.a "$(DESTDIR)$(LIBDIR)/libgif.a"
+install-shared-lib:
+	$(INSTALL) -d "$(DESTDIR)$(LIBDIR)"
 	$(INSTALL) -m 755 $(LIBGIFSO) "$(DESTDIR)$(LIBDIR)/$(LIBGIFSOVER)"
 	ln -sf $(LIBGIFSOVER) "$(DESTDIR)$(LIBDIR)/$(LIBGIFSOMAJOR)"
 	ln -sf $(LIBGIFSOMAJOR) "$(DESTDIR)$(LIBDIR)/$(LIBGIFSO)"
+install-lib: install-static-lib install-shared-lib
 install-man:
 	$(INSTALL) -d "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(MANDIR)/man7"
 	$(INSTALL) -m 644 $(MANUAL_PAGES_1:xml=1) "$(DESTDIR)$(MANDIR)/man1"
@@ -170,10 +198,14 @@ uninstall-man:
 	cd "$(DESTDIR)$(MANDIR)/man1" && rm -f $(shell cd doc >/dev/null && echo *.1)
 	cd "$(DESTDIR)$(MANDIR)/man7" && rm -f $(shell cd doc >/dev/null && echo *.7)
 
-# Make distribution tarball
+# Export
 #
 # We include all of the XML, and also generated manual pages
 # so people working from the distribution tarball won't need xmlto.
+
+# Check that getversion hasn't gone pear-shaped.
+version:
+	@echo $(VERSION)
 
 EXTRAS =     README.adoc \
 	     NEWS \
@@ -197,15 +229,7 @@ giflib-$(VERSION).tar.bz2: $(ALL)
 
 dist: giflib-$(VERSION).tar.gz giflib-$(VERSION).tar.bz2
 
-# Auditing tools.
-
-# Check that getversion hasn't gone pear-shaped.
-version:
-	@echo $(VERSION)
-
-# cppcheck should run clean
-cppcheck:
-	@cppcheck --quiet --inline-suppr --template gcc --enable=all --suppress=unusedFunction --suppress=missingInclude --force *.[ch]
+# Export
 
 # Verify the build
 distcheck: all
@@ -225,3 +249,5 @@ refresh: all
 	$(MAKE) -C doc website
 	shipper --no-stale -w version=$(VERSION) | sh -e -x
 	rm -fr doc/staging
+
+# end

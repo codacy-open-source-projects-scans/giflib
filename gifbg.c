@@ -11,6 +11,7 @@ gifbg - generate a test-pattern GIF
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "getarg.h"
 #include "gif_lib.h"
@@ -84,6 +85,14 @@ int main(int argc, char **argv) {
 		(void)fprintf(stderr, VerStr, GIFLIB_MAJOR, GIFLIB_MINOR);
 		GAPrintHowTo(CtrlStr);
 		exit(EXIT_SUCCESS);
+	}
+
+	/* Validate image dimensions early to avoid overflow/negative values. */
+	if (ImageWidth <= 0 || ImageHeight <= 0) {
+		GIF_EXIT("Image size must be positive.");
+	}
+	if (ImageWidth > INT_MAX / 2) {
+		GIF_EXIT("Image width too large.");
 	}
 
 	/* Make sure intensities are in the right range: */

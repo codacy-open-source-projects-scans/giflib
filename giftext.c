@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
 			printf("\tSort Flag: %s\n",
 			       GifFile->SColorMap->SortFlag ? "on" : "off");
 			for (i = 0; i < Len; i += 4) {
-				for (j = 0; j < 4 && j < Len; j++) {
+				for (j = 0; j < 4 && i + j < Len; j++) {
 					printf("%3d: %02xh %02xh %02xh   ",
 					       i + j,
 					       GifFile->SColorMap->Colors[i + j]
@@ -438,9 +438,9 @@ static void PrintExtBlock(GifByteType *Extension, bool Reset) {
 		int i, Len;
 		Len = Extension[0];
 		for (i = 1; i <= Len; i++) {
-			(void)snprintf(&HexForm[CrntPlace * 3], 3, " %02x",
+			(void)snprintf(&HexForm[CrntPlace * 3], 4, " %02x",
 			               Extension[i]);
-			(void)snprintf(&AsciiForm[CrntPlace], 3, "%c",
+			(void)snprintf(&AsciiForm[CrntPlace], 2, "%c",
 			               MAKE_PRINTABLE(Extension[i]));
 			if (++CrntPlace == 16) {
 				HexForm[CrntPlace * 3] = 0;
@@ -484,9 +484,9 @@ static void PrintPixelBlock(GifByteType *PixelBlock, int Len, bool Reset) {
 	}
 
 	for (i = 0; i < Len; i++) {
-		(void)snprintf(&HexForm[CrntPlace * 3], 3, " %02x",
+		(void)snprintf(&HexForm[CrntPlace * 3], 4, " %02x",
 		               PixelBlock[i]);
-		(void)snprintf(&AsciiForm[CrntPlace], 3, "%c",
+		(void)snprintf(&AsciiForm[CrntPlace], 2, "%c",
 		               MAKE_PRINTABLE(PixelBlock[i]));
 		if (++CrntPlace == 16) {
 			HexForm[CrntPlace * 3] = 0;
