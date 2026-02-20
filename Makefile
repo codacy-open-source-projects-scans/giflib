@@ -13,11 +13,13 @@ BINDIR = $(PREFIX)/bin
 INCDIR = $(PREFIX)/include
 LIBDIR = $(PREFIX)/lib
 MANDIR = $(PREFIX)/share/man
+DOCDIR = $(PREFIX)/share/doc/giflib
 
 CC ?= gcc
-OFLAGS = -O0 -g
+OFLAGS = -g -fno-inline #-fsanitize=address
 OFLAGS  = -O2
 CFLAGS  += -std=gnu99 -fPIC -Wall $(OFLAGS)
+#LDFLAGS += -fsanitize=address
 
 SHELL = /bin/sh
 TAR = tar
@@ -45,15 +47,14 @@ UNAME:=$(shell uname)
 # Rules
 
 .PHONY: all distcheck check reflow cppcheck spellcheck
-.PHONY: install install-bin install-include ibnstall-lib install-man
-.PHONY: uninstall uninstall-bin uninstall-include uninstall-lib uninstall-man
+.PHONY: install install-bin install-include ibnstall-lib install-man install-doc
+.PHONY: uninstall uninstall-bin uninstall-include uninstall-lib uninstall-man uninstall-doc
 .PHONY: version dist release refresh
 
 # Build
 
 # Some utilities are installed
 INSTALLABLE = \
-	gif2rgb \
 	gifbuild \
 	giffix \
 	giftext \
@@ -71,12 +72,12 @@ UTILS = $(INSTALLABLE) \
 	gifhisto \
 	gifinto \
 	gifsponge \
-	gifwedge
+	gifwedge \
+	gif2rgb
 
 LDLIBS=libgif.a -lm
 
 MANUAL_PAGES_1 = \
-	doc/gif2rgb.xml \
 	doc/gifbuild.xml \
 	doc/gifclrmp.xml \
 	doc/giffix.xml \
@@ -87,6 +88,8 @@ MANUAL_PAGES_7 = \
 	doc/giflib.xml
 
 MANUAL_PAGES = $(MANUAL_PAGES_1) $(MANUAL_PAGES_7)
+MANUAL_PAGES_1_MAN = $(MANUAL_PAGES_1:%.xml=%.1)
+MANUAL_PAGES_7_MAN = $(MANUAL_PAGES_7:%.xml=%.7)
 
 SOEXTENSION	= so
 LIBGIFSO	= libgif.$(SOEXTENSION)
@@ -130,7 +133,7 @@ libgif.a: $(OBJECTS) $(HEADERS)
 
 $(LIBUTILSO): $(UOBJECTS) $(UHEADERS)
 ifeq ($(UNAME), Darwin)
-	$(CC) $(CFLAGS) -dynamiclib -current_version $(LIBVER) $(OBJECTS) -o $(LIBUTILSO)
+	$(CC) $(CFLAGS) -dynamiclib -current_version $(LIBVER) $(UOBJECTS) -o $(LIBUTILSO)
 else
 	$(CC) $(CFLAGS) $(CPPLAGS) -shared $(LDFLAGS) -Wl,-soname -Wl,$(LIBUTILSOMAJOR) -o $(LIBUTILSO) $(UOBJECTS)
 endif
@@ -139,7 +142,7 @@ libutil.a: $(UOBJECTS) $(UHEADERS)
 	$(AR) rcs libutil.a $(UOBJECTS)
 
 clean:
-	rm -f $(UTILS) $(TARGET) libgetarg.a $(SHARED_LIBS) $(STATIC_LIBS) *.o
+	rm -f $(UTILS) $(OBSOLETE_UTILS) $(TARGET) libgetarg.a $(SHARED_LIBS) $(STATIC_LIBS) *.o
 	rm -f $(LIBGIFSOVER)
 	rm -f $(LIBGIFSOMAJOR)
 	$(MAKE) --quiet -C doc clean
@@ -151,6 +154,8 @@ check: all
 
 reflow:
 	@clang-format --style="{IndentWidth: 8, UseTab: ForIndentation}" -i $$(find . -name "*.[ch]")
+
+obsolete-utils: $(OBSOLETE_UTILS)
 
 # cppcheck should run clean
 cppcheck:
@@ -164,7 +169,7 @@ spellcheck:
 ifeq ($(UNAME), Darwin)
 install: all install-bin install-include install-lib
 else
-install: all install-bin install-include install-lib install-man
+install: all install-bin install-include install-lib install-man install-doc
 endif
 
 install-bin: $(INSTALLABLE)
@@ -184,8 +189,15 @@ install-shared-lib:
 install-lib: install-static-lib install-shared-lib
 install-man:
 	$(INSTALL) -d "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(MANDIR)/man7"
-	$(INSTALL) -m 644 $(MANUAL_PAGES_1:xml=1) "$(DESTDIR)$(MANDIR)/man1"
-	$(INSTALL) -m 644 $(MANUAL_PAGES_7:xml=7) "$(DESTDIR)$(MANDIR)/man7"
+	$(INSTALL) -m 644 $(MANUAL_PAGES_1_MAN) "$(DESTDIR)$(MANDIR)/man1"
+	$(INSTALL) -m 644 $(MANUAL_PAGES_7_MAN) "$(DESTDIR)$(MANDIR)/man7"
+install-doc:
+	$(MAKE) -C doc allhtml
+	$(INSTALL) -d "$(DESTDIR)$(DOCDIR)/html"
+	cd doc && $(INSTALL) -m 644 $$(echo *.html) "$(DESTDIR)$(DOCDIR)/html"
+	@if [ -f doc/giflib-logo.gif ]; then \
+		$(INSTALL) -m 644 doc/giflib-logo.gif "$(DESTDIR)$(DOCDIR)/html"; \
+	fi
 uninstall: uninstall-man uninstall-include uninstall-lib uninstall-bin
 uninstall-bin:
 	cd "$(DESTDIR)$(BINDIR)" && rm -f $(INSTALLABLE)
@@ -197,6 +209,8 @@ uninstall-lib:
 uninstall-man:
 	cd "$(DESTDIR)$(MANDIR)/man1" && rm -f $(shell cd doc >/dev/null && echo *.1)
 	cd "$(DESTDIR)$(MANDIR)/man7" && rm -f $(shell cd doc >/dev/null && echo *.7)
+uninstall-doc:
+	rm -rf "$(DESTDIR)$(DOCDIR)/html"
 
 # Export
 #
@@ -207,39 +221,27 @@ uninstall-man:
 version:
 	@echo $(VERSION)
 
-EXTRAS =     README.adoc \
-	     NEWS \
+EXTRAS =     NEWS \
 	     TODO \
 	     COPYING \
 	     getversion \
 	     ChangeLog \
-	     build.adoc \
-	     history.adoc \
 	     control \
-	     doc/whatsinagif \
-	     doc/gifstandard \
+	     local.dic
 
-DSOURCES = Makefile *.[ch]
-DOCS = doc/*.xml doc/*.1 doc/*.7 doc/*.html doc/index.html.in doc/00README doc/Makefile
-ALL =  $(DSOURCES) $(DOCS) tests pic $(EXTRAS)
+ALL =  Makefile *.[ch] *.adoc doc tests pic $(EXTRAS)
+
 giflib-$(VERSION).tar.gz: $(ALL)
-	$(TAR) --transform='s:^:giflib-$(VERSION)/:' -czf giflib-$(VERSION).tar.gz $(ALL)
-giflib-$(VERSION).tar.bz2: $(ALL)
-	$(TAR) --transform='s:^:giflib-$(VERSION)/:' -cjf giflib-$(VERSION).tar.bz2 $(ALL)
-
-dist: giflib-$(VERSION).tar.gz giflib-$(VERSION).tar.bz2
-
-# Export
-
-# Verify the build
-distcheck: all
-	$(MAKE) giflib-$(VERSION).tar.gz
-	tar xzvf giflib-$(VERSION).tar.gz
-	$(MAKE) -C giflib-$(VERSION)
+	mkdir giflib-$(VERSION)
+	cp -r $(ALL) giflib-$(VERSION)
+	tar -czf giflib-$(VERSION).tar.gz giflib-$(VERSION)
 	rm -fr giflib-$(VERSION)
+	ls -l giflib-$(VERSION).tar.gz
+
+dist: giflib-$(VERSION).tar.gz
 
 # release using the shipper tool
-release: all distcheck
+release: all giflib-$(VERSION).tar.gz
 	$(MAKE) -C doc website
 	shipper --no-stale version=$(VERSION) | sh -e -x
 	rm -fr doc/staging

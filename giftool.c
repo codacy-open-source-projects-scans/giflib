@@ -78,12 +78,9 @@ bool getbool(char *from) {
 		}
 	}
 
-	if (sp == NULL) {
-		(void)fprintf(stderr,
-		              "giftool: %s is not a valid boolean argument.\n",
-		              // cppcheck-suppress nullPointerRedundantCheck
-		              sp->name);
-	}
+	(void)fprintf(stderr,
+	              "giftool: %s is not a valid boolean argument.\n",
+	              from);
 	exit(EXIT_FAILURE);
 }
 
@@ -638,8 +635,8 @@ int main(int argc, char **argv) {
 		(void)GifMakeSavedImage(GifFileOut, &GifFileIn->SavedImages[i]);
 	}
 
-	if (EGifSpew(GifFileOut) == GIF_ERROR) {
-		PrintGifError(GifFileOut->Error);
+	if (EGifSpew(GifFileOut, &ErrorCode) == GIF_ERROR) {
+		PrintGifError(ErrorCode);
 	} else if (DGifCloseFile(GifFileIn, &ErrorCode) == GIF_ERROR) {
 		PrintGifError(ErrorCode);
 	}
